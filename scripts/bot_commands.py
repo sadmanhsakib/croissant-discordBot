@@ -1,7 +1,8 @@
-import os, json, random, datetime
+import datetime, json, os, random
 import discord
-import reddit, config
 from discord.ext import commands, tasks
+import config
+import reddit
 from database import db
 
 class BotCommands(commands.Cog):
@@ -163,6 +164,9 @@ class BotCommands(commands.Cog):
         try:
             if message == '':
                 raise Exception
+            if not config.REDDIT_ENABLED:
+                await ctx.send("Reddit functionality is not available at this time.")
+                return
 
             # creating a object for using the reddit api
             fetcher = reddit.Fetch()

@@ -8,10 +8,15 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 README_URL = os.getenv("README_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
 GROQ_API = os.getenv("GROQ_API")
-USERNAME = os.getenv("REDDIT_USERNAME")
-PASSWORD = os.getenv("REDDIT_PASSWORD")
+
+REDDIT_USERNAME = os.getenv("REDDIT_USERNAME")
+REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("SECRET")
+
+if not CLIENT_ID or not CLIENT_SECRET or not REDDIT_PASSWORD or not REDDIT_USERNAME:
+    print("❌ Reddit credentials are not set in the .env file. Reddit functionality will be disabled.")
+    REDDIT_ENABLED = False
 
 # master variables from database
 system_prompt=None

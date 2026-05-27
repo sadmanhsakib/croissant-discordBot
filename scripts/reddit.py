@@ -16,8 +16,8 @@ async def authenticate():
         reddit = asyncpraw.Reddit(
             client_id=config.CLIENT_ID,
             client_secret=config.CLIENT_SECRET,
-            username=config.USERNAME,
-            password=config.PASSWORD,
+            username=config.REDDIT_USERNAME,
+            password=config.REDDIT_PASSWORD,
             user_agent="Pain au Chocolat (by u/Herr_Sakib)",
         )
 

@@ -1,7 +1,8 @@
 import discord
-import config, reddit
 from discord.ext import commands
 from groq import Groq
+import config
+import reddit
 from database import db
 
 # giving the permissions
@@ -33,8 +34,9 @@ async def on_ready():
     # loading the data from the database
     await config.load_all_data()
 
-    # authenticating the reddit api
-    await reddit.authenticate()
+    if config.REDDIT_ENABLED:
+        # authenticating the reddit api
+        await reddit.authenticate()
 
     # loading the command script
     await bot.load_extension("bot_commands")

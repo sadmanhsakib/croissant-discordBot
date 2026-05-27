@@ -1,240 +1,292 @@
-# Croissant Discord Bot
+# 🥐 Croissant
 
-A feature-rich Discord bot written in Python that helps moderate channels, automate routine tasks, provide utility commands, and fetch media content from Reddit. Croissant is designed to be **server-aware** (per-guild configuration), with settings persisted in a PostgreSQL database.
+> A production-grade, per-guild Discord bot with async PostgreSQL persistence, AI-powered conversations via Groq, scheduled channel lifecycle management, and Reddit media integration — built for real operational demands.
 
-## 📑 Table of Contents
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Docker Ready](https://img.shields.io/badge/docker-ready-2496ED)](Dockerfile)
 
-- [Overview](#overview)
-- [Invite Croissant](#invite-croissant)
-- [Key Features](#key-features)
-- [Commands](#commands)
-- [How It Works (Architecture)](#how-it-works-architecture)
-- [Requirements](#requirements)
-- [Configuration](#configuration)
-- [Security & Privacy](#security--privacy)
-- [Contributing](#contributing)
-- [License](#license)
+---
 
-## 📖 Overview
+## Why Croissant Exists
 
-Croissant is an “everyday” Discord bot that provides:
+Most Discord bots treat all servers as interchangeable. They store configuration in flat files, hardcode behavior, and fall apart the moment you run them across multiple guilds with different expectations.
 
-- AI-powered responses 
-- Utility commands (ping, status, echo, hello)
-- Moderation helpers (bulk message deletion)
-- Media storage and quick posting via `;ITEM_NAME`
-- Reddit image/GIF fetching (with NSFW gating)
-- Presence-based greetings (welcome back / bye)
-- Scheduled channel cleanup (“AutoDelete”) at a configured daily time
-- Per-server configuration stored in PostgreSQL
+Croissant was designed around a different premise: **every guild is its own operational unit**. Prefix, content policy, cleanup schedules, Reddit NSFW gates — all of it is isolated per server, persisted in PostgreSQL, and loaded into a hot in-memory cache. The bot never conflates one guild's state with another's.
 
-Default command prefix is `-` (per-server customizable).
+The secondary premise is that utility bots should be genuinely useful at runtime, not just at setup time. That means: AI responses that behave predictably, a media shorthand system that reduces friction to zero, and scheduled infrastructure that works even if the process restarts.
 
-## 🥐 Invite Croissant
-If you want to add **Croissant** in your Discord server, feel free to add this bot to your server by clicking [here](https://discord.com/oauth2/authorize?client_id=1419550251739516959&permissions=1374389746800&integration_type=0&scope=bot).
+---
 
-## ✨ Key Features
+## Architectural Overview
 
-- **AI-Powered Responses**
-  - Mention the bot to ask questions and receive intelligent AI-generated responses powered by [Groq](https://groq.com/).
-- **Docker Support**
-  - Easily deploy and host the bot using Docker for streamlined configuration and portability.
-- **Per-server configuration**
-  - Prefix, Reddit search limits, NSFW policy, delete timers, and more are stored per guild.
-- **Media storage**
-  - Save image/GIF/video links under a short name and recall them instantly.
-- **Reddit integration**
-  - Fetch a random image/GIF from a subreddit with controls for NSFW content.
-- **Scheduled channel purging**
-  - Optional daily automated cleanup for configured channels.
-- **Presence notifications**
-  - Optional “welcome back / bye” messages when members go online/offline.
+```
+┌───────────────────────────────────────────────────────┐
+│                       main.py                         │
+│  Discord gateway · event dispatch · Groq AI handler   │
+│  presence tracking · guild join/leave lifecycle       │
+└────────────┬──────────────────────────┬───────────────┘
+             │                          │
+     ┌───────▼──────┐          ┌────────▼────────┐
+     │ bot_commands │          │    reddit.py     │
+     │ (Cog layer)  │          │  asyncpraw auth  │
+     │ prefix cmds  │          │  image/GIF fetch │
+     │ bg scheduler │          └─────────────────┘
+     └───────┬──────┘
+             │
+     ┌───────▼──────┐          ┌─────────────────┐
+     │   config.py  │◄────────►│   database.py   │
+     │ env loading  │          │  asyncpg pool   │
+     │ guild cache  │          │  parameterized  │
+     └──────────────┘          │  queries        │
+                               └─────────────────┘
+```
 
-## 💬 Commands
+**Five discrete modules, each with a single axis of responsibility:**
 
-Croissant uses a **prefix command system** (default: `-`). Commands below assume the prefix is `-`. Additionally, the bot responds to **@mentions** for AI-powered conversations.
+| Module | Responsibility |
+|---|---|
+| `main.py` | Discord client bootstrap, event routing, AI mention handling |
+| `bot_commands.py` | All prefix commands as a single Cog; background scheduler loop |
+| `config.py` | `.env` parsing; in-memory per-guild config cache |
+| `database.py` | Async PostgreSQL access layer via `asyncpg`; all queries parameterized |
+| `reddit.py` | Reddit OAuth2 session management; media post resolution |
 
-### AI Conversation
+There is no circular dependency between these layers. `database.py` knows nothing about Discord. `config.py` knows nothing about Reddit. The separation is intentional and load-bearing.
 
-- `@Croissant YOUR_QUESTION`
-  - Mention the bot followed by your question to receive an AI-generated response.
-  - **How it works**: The bot uses [Groq](https://groq.com/)'s API to process your message and generate intelligent responses. The AI model, token limits, system prompt, and temperature are configured centrally in the database, allowing fine-tuned control over response behavior.
-  - **Example**: `@Croissant What is the capital of France?`
+---
+
+## Per-Guild Configuration Model
+
+Each guild gets its own row in PostgreSQL at join time. The config cache (`config.py`) loads these rows on startup and keeps them hot — no database round-trips on every command.
+
+Configurable per guild:
+
+| Variable | Effect |
+|---|---|
+| `PREFIX` | Command prefix (default: `-`) |
+| `DELETE_AFTER` | Auto-delete delay on bot responses |
+| `SEARCH_LIMIT` | Reddit post search depth |
+| `NSFW_ALLOWED` | Gates all NSFW content globally for the guild |
+| `ACTIVITY_CHANNEL_ID` | Channel for presence notifications |
+
+Changes via `-set` write through to the database and refresh the cache. Guild data is pruned entirely on bot leave — no orphaned rows.
+
+---
+
+## Key Subsystems
+
+### AI Conversations (Groq)
+
+Mentioning the bot triggers an AI completion via [Groq](https://groq.com/)'s API. The model, system prompt, token limits, and temperature are configured centrally in the database — not hardcoded. This means tuning response behavior is an operational concern, not a code deployment.
+
+```
+@Croissant What's the difference between asyncio.gather and asyncio.wait?
+```
+
+Conversation history is held in local cache only — it is never written to the database.
+
+### Media Storage and the `;` Dispatch
+
+The `;ITEM_NAME` trigger is parsed at the `on_message` level before command dispatch, keeping latency minimal. Items are stored as links (image, GIF, video) against a short name, scoped to the guild and a normal/NSFW partition. NSFW items will only be sent in Discord-marked NSFW channels, regardless of what the invoking user requests.
+
+```
+-add banner https://cdn.example.com/banner.gif   # store
+;banner                                           # recall anywhere in a message
+```
+
+### Scheduled Channel Purging (AutoDelete)
+
+A background task in `bot_commands.py` polls at 60-second resolution against a per-guild schedule. When a channel's configured purge time is reached (Asia/Dhaka timezone), the bot performs a full bulk delete. The schedule survives restarts because it is persisted in PostgreSQL.
+
+```
+-add autodelete 123456789 03:00:00   # purge channel 123456789 daily at 03:00
+```
+
+### Reddit Media Fetch
+
+Authentication against Reddit's OAuth2 API is handled by `asyncpraw`. Post resolution respects the guild's `NSFW_ALLOWED` flag — NSFW subreddits return an error unless explicitly enabled. The `SEARCH_LIMIT` variable controls how many posts are sampled before a random image/GIF is selected.
+
+---
+
+## Security Model
+
+**No persistent message storage.** The bot processes messages in real-time and discards them. Nothing a user sends is written to the database.
+
+**Parameterized queries throughout.** `database.py` uses `asyncpg`'s native parameterization for all user-supplied values. SQL injection is structurally prevented, not just audited for.
+
+**NSFW gating is two-factor.** A guild must set `NSFW_ALLOWED=true` *and* the invocation must occur in a Discord-native NSFW channel. Either condition failing blocks delivery.
+
+**Credentials are environment-only.** Bot token, database URL, Groq key, and Reddit credentials are read from `.env` at startup. Nothing sensitive exists in source.
+
+**Least-privilege Intents.** The bot requests only `Message Content`, `Presences`, and `Members` — the minimum set required for its features.
+
+---
+
+## Commands Reference
+
+**Prefix:** `-` (per-guild configurable)
+
+### AI
+| Command | Description |
+|---|---|
+| `@Croissant <question>` | AI-generated response via Groq |
 
 ### General
-
-- `-help`
-  - Shows an embedded help menu.
-- `-echo MESSAGE --number(OPTIONAL)`
-  - Repeats the message back to the channel.
-- `-hello`
-  - Greets the user.
-- `-ping`
-  - Displays bot latency.
-- `-status`
-  - Shows bot status.
-- `-list`
-  - Lists saved item names in normal storage.
-- `-list nsfw`
-  - Lists saved item names in NSFW storage.
-- `-list autodelete`
-  - Lists channels scheduled for daily auto-deletion.
+| Command | Description |
+|---|---|
+| `-help` | Embedded help menu |
+| `-ping` | Gateway latency |
+| `-status` | Bot status |
+| `-echo <message> [--number N]` | Echo message N times |
+| `-hello` | Greet the invoking user |
+| `-list` | List all saved media item names |
+| `-list nsfw` | List NSFW item names |
+| `-list autodelete` | List scheduled purge channels |
 
 ### Moderation
+| Command | Description |
+|---|---|
+| `-del <N>` | Bulk delete N messages (includes command message) |
+| `-del all` | Purge entire channel |
 
-- `-del NUMBER`
-  - Deletes `NUMBER` messages in the current channel (also removes the command message).
-- `-del all`
-  - Deletes all messages in the current channel (bulk purge).
-
-### Media / Storage
-
-- `;ITEM_NAME`
-  - Posts the saved link for `ITEM_NAME` (triggered by typing `;name` in any message).
-- `-add NAME LINK`
-  - Adds an item to normal storage.
-- `-add nsfw NAME LINK`
-  - Adds an item to NSFW storage (only sends in NSFW channels).
-- `-rmv NAME`
-  - Removes an item from storage (normal or NSFW).
-
-### Greetings
-
-- `-greet USERNAME ITEM1 ITEM2 ...`
-  - Sends a text greeting, then posts the requested stored items.
+### Media
+| Command | Description |
+|---|---|
+| `;ITEM_NAME` | Post saved link (inline trigger) |
+| `-add <name> <link>` | Save item to normal storage |
+| `-add nsfw <name> <link>` | Save item to NSFW storage |
+| `-rmv <name>` | Remove item from storage |
+| `-greet <username> <item1> ...` | Text greeting followed by stored items |
 
 ### Reddit
+| Command | Description |
+|---|---|
+| `-reddit <subreddit>` | Fetch random image/GIF from subreddit |
 
-- `-reddit SUBREDDIT_NAME`
-  - Fetches a random **image/GIF** post from the given subreddit.
-  - NSFW subreddits are blocked unless `NSFW_ALLOWED=true` for that server.
+### Scheduled Purge
+| Command | Description |
+|---|---|
+| `-add autodelete <channel_id> <HH:MM:SS>` | Schedule daily channel purge |
+| `-rmv autodelete <channel_id>` | Remove purge schedule |
 
-### Scheduled AutoDelete
-
-- `-add autodelete CHANNEL_ID TIME(HOUR:MINUTE:SECOND)`
-  - Schedules a channel to be purged daily at the specified time (Asia/Dhaka timezone).
-- `-rmv autodelete CHANNEL_ID`
-  - Removes the channel from the schedule.
-
-### Configuration (Per Server)
-
-- `-set VARIABLE VALUE`
-  - Supported variables:
-    - `PREFIX`
-    - `DELETE_AFTER`
-    - `SEARCH_LIMIT`
-    - `NSFW_ALLOWED`
-    - `ACTIVITY_CHANNEL_ID`
+### Configuration
+| Command | Description |
+|---|---|
+| `-set <VARIABLE> <value>` | Update per-guild config variable |
+| `-reload_var` | Reload all guild config from database |
 
 ### Utilities
+| Command | Description |
+|---|---|
+| `-random-line quran\|sunnah\|quote` | Random line from bundled text assets |
 
-- `-random-line quran|sunnah|quote`
-  - Sends a random line from `assets/quran.txt`, `assets/sunnah.txt`, or `assets/quote.txt`.
+---
 
-### Admin / Maintenance
+## Requirements
 
-- `-reload_var`
-  - Reloads all server configuration values from the database.
+- Python 3.10+ (3.12 recommended for Docker)
+- PostgreSQL (connection URL)
+- Discord bot token with Message Content, Presences, and Members intents
+- [Groq](https://groq.com/) API key — required for AI responses
+- Reddit API credentials — required only for `-reddit`
 
-## 🏗️ How It Works (Architecture)
+Python dependencies: see [`requirements.txt`](requirements.txt)
 
-- **[main.py](main.py)**
-  - Creates the Discord bot, loads configuration from the database, authenticates Reddit, and loads the command cog.
-  - Handles:
-    - Guild join/leave events
-    - Message events (`;ITEM_NAME` parsing, AI mentions via Groq)
-    - Presence updates (welcome back / bye)
-- **[bot_commands.py](bot_commands.py)**
-  - The main command cog (commands listed above).
-  - Runs a background scheduler loop (every 60s) for daily channel purging.
-- **[config.py](config.py)**
-  - Loads [.env](example.env) variables and maintains per-guild caches loaded from PostgreSQL.
-- **[database.py](database.py)**
-  - Async PostgreSQL layer using `asyncpg`, storing per-server variables in a single table.
-- **[reddit.py](reddit.py)**
-  - Reddit authentication + image/GIF fetching via `asyncpraw`.
+---
 
-## 📋 Requirements
+## Setup
 
-- Python 3.10+ recommended (Python 3.12 for Docker)
-- A Discord application + bot token
-- PostgreSQL database (connection URL required)
-- Groq API key (required for AI-powered responses)
-- Reddit API credentials (optional but required for `-reddit`)
-- Check [requirements](requirements.txt) for additional libraries that are required for local hosting
+**1. Clone and configure**
 
+```bash
+git clone https://github.com/sadmanhsakib/Croissant-Discord_BOT.git
+cd Croissant-Discord_BOT
+cp example.env .env
+```
 
-## ⚙️ Configuration
-
-Create a [.env](example.env) file in the project root with:
+Edit `.env`:
 
 ```env
 BOT_TOKEN=your_discord_bot_token
-README_URL=https://github.com/sadmanhsakib/Croissant-Discord_BOT/blob/main/README.md
 DATABASE_URL=postgresql://user:password@host:port/dbname
 
-# Groq API (required for AI responses)
 GROQ_API=your_groq_api_key
 
-# Reddit (required only for -reddit)
+# Optional — only needed for -reddit
 REDDIT_USERNAME=your_reddit_username
 REDDIT_PASSWORD=your_reddit_password
 CLIENT_ID=your_reddit_client_id
 SECRET=your_reddit_client_secret
+
+README_URL=https://github.com/sadmanhsakib/Croissant-Discord_BOT/blob/main/README.md
 ```
 
-## 🐳 Docker Deployment
+**2. Install dependencies**
 
-Croissant includes a [Dockerfile](Dockerfile) for easy containerized deployment.
+```bash
+pip install -r requirements.txt
+```
 
-### Quick Start
+**3. Run**
 
-1. **Build the Docker image**:
-   ```bash
-   docker build -t croissant-bot .
-   ```
+```bash
+python main.py
+```
 
-2. **Run the container**:
-   ```bash
-   docker run -d --env-file .env --name croissant croissant-bot
-   ```
+---
 
-### Docker Compose (Optional)
+## Docker Deployment
 
-For more complex setups, you can use Docker Compose to manage the bot alongside a PostgreSQL database.
+The included [`Dockerfile`](Dockerfile) targets Python 3.12 and produces a minimal, portable image.
 
-### Benefits
+**Build and run:**
 
-- **Portability**: Run the bot on any system with Docker installed.
-- **Isolation**: Dependencies are containerized, avoiding conflicts with the host system.
-- **Easy Updates**: Rebuild the image to apply updates seamlessly.
+```bash
+docker build -t croissant-bot .
+docker run -d --env-file .env --name croissant croissant-bot
+```
 
-## 🔒 Security & Privacy
+**With Docker Compose** (bot + PostgreSQL):
 
-Croissant is built with security and privacy in mind, ensuring that server data and user interactions are handled responsibly.
+```yaml
+services:
+  bot:
+    build: .
+    env_file: .env
+    depends_on:
+      - db
+    restart: unless-stopped
 
-### Core Security Features
-- **Environment Variables**: Sensitive credentials such as the Discord Bot Token, Database URL, and Reddit API keys are stored securely in a `.env` file and are never hardcoded into the source code. This prevents accidental exposure in version control.
-- **Database Isolation**: All configuration data is stored in a secure PostgreSQL database (`asyncpg`). The bot uses parameterized queries to prevent SQL injection attacks.
-- **Permission Management**:
-  - The bot uses Discord's **Intents** system to request only necessary data (Message Content, Presences, Members).
-  - Moderation commands (like `-del`) and configuration commands (like `-set`) are restricted to users with appropriate permissions or are designed to be used by server administrators.
-- **Data Minimization**:
-  - The bot **does not** permanently store user messages. It only processes messages in real-time for commands and specific triggers (like `;item`).
-  - Stored data is strictly limited to server configuration (prefixes, limits) and user-defined shortcuts (media links).
-  - AI responses are only stored in the local cache and are not stored in the database.
-  - Upon server leave, the bot removes all server-specific data from the local cache and the database.
-- **NSFW Protection**:
-  - NSFW content from Reddit or stored items is strictly gated. It requires the server to explicitly enable `NSFW_ALLOWED` and can only be accessed in channels marked as NSFW within Discord.
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: croissant
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: croissant
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
-## 🤝 Contributing
+volumes:
+  pgdata:
+```
 
-This project is the work of a sole contributor.
+---
 
-- **Lead Developer & Maintainer**: [Sadman Sakib](https://github.com/sadmanhsakib)
+## Add Croissant to Your Server
 
-If you have suggestions, bug reports, or feature requests, please open an issue on the GitHub repository. While external contributions are welcome via Pull Requests, please note that the core vision and maintenance are handled by the author.
+[Invite Croissant](https://discord.com/oauth2/authorize?client_id=1419550251739516959&permissions=1374389746800&integration_type=0&scope=bot)
 
-## 📄 License
+---
 
-This project is licensed under the PolyForm Noncommercial License 1.0.0 - see the [LICENSE](LICENSE) file for details.
+## Contributing
+
+This project is maintained by a single author: [Sadman Sakib](https://github.com/sadmanhsakib).
+
+Bug reports, feature requests, and pull requests are welcome via GitHub Issues and PRs. The core architecture and design decisions rest with the author.
+
+---
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](LICENSE)
