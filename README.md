@@ -20,18 +20,18 @@ The secondary premise is that utility bots should be genuinely useful at runtime
 
 ## Architectural Overview
 
-```
+```text
 ┌───────────────────────────────────────────────────────┐
 │                       main.py                         │
 │  Discord gateway · event dispatch · Groq AI handler   │
 │  presence tracking · guild join/leave lifecycle       │
 └────────────┬──────────────────────────┬───────────────┘
              │                          │
-     ┌───────▼──────┐          ┌────────▼────────┐
+     ┌───────▼──────┐          ┌────────▼─────────┐
      │ bot_commands │          │    reddit.py     │
      │ (Cog layer)  │          │  asyncpraw auth  │
      │ prefix cmds  │          │  image/GIF fetch │
-     │ bg scheduler │          └─────────────────┘
+     │ bg scheduler │          └──────────────────┘
      └───────┬──────┘
              │
      ┌───────▼──────┐          ┌─────────────────┐
@@ -80,7 +80,7 @@ Changes via `-set` write through to the database and refresh the cache. Guild da
 
 Mentioning the bot triggers an AI completion via [Groq](https://groq.com/)'s API. The model, system prompt, token limits, and temperature are configured centrally in the database — not hardcoded. This means tuning response behavior is an operational concern, not a code deployment.
 
-```
+```text
 @Croissant What's the difference between asyncio.gather and asyncio.wait?
 ```
 
@@ -90,7 +90,7 @@ Conversation history is held in local cache only — it is never written to the 
 
 The `;ITEM_NAME` trigger is parsed at the `on_message` level before command dispatch, keeping latency minimal. Items are stored as links (image, GIF, video) against a short name, scoped to the guild and a normal/NSFW partition. NSFW items will only be sent in Discord-marked NSFW channels, regardless of what the invoking user requests.
 
-```
+```text
 -add banner https://cdn.example.com/banner.gif   # store
 ;banner                                           # recall anywhere in a message
 ```
@@ -99,7 +99,7 @@ The `;ITEM_NAME` trigger is parsed at the `on_message` level before command disp
 
 A background task in `bot_commands.py` polls at 60-second resolution against a per-guild schedule. When a channel's configured purge time is reached (Asia/Dhaka timezone), the bot performs a full bulk delete. The schedule survives restarts because it is persisted in PostgreSQL.
 
-```
+```text
 -add autodelete 123456789 03:00:00   # purge channel 123456789 daily at 03:00
 ```
 
@@ -185,7 +185,7 @@ Authentication against Reddit's OAuth2 API is handled by `asyncpraw`. Post resol
 
 ## Requirements
 
-- Python 3.10+ (3.12 recommended for Docker)
+- Python 3.10+ (3.14 recommended for Docker)
 - PostgreSQL (connection URL)
 - Discord bot token with Message Content, Presences, and Members intents
 - [Groq](https://groq.com/) API key — required for AI responses
@@ -197,11 +197,11 @@ Python dependencies: see [`requirements.txt`](requirements.txt)
 
 ## Setup
 
-**1. Clone and configure**
+**1. Clone and configure:**
 
 ```bash
-git clone https://github.com/sadmanhsakib/Croissant-Discord_BOT.git
-cd Croissant-Discord_BOT
+git clone https://github.com/sadmanhsakib/croquembouche-discordBot.git
+cd croissant-discordBot
 cp example.env .env
 ```
 
@@ -218,27 +218,24 @@ REDDIT_USERNAME=your_reddit_username
 REDDIT_PASSWORD=your_reddit_password
 CLIENT_ID=your_reddit_client_id
 SECRET=your_reddit_client_secret
-
-README_URL=https://github.com/sadmanhsakib/Croissant-Discord_BOT/blob/main/README.md
 ```
 
-**2. Install dependencies**
-
+**2. Install dependencies using uv:**
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-**3. Run**
+**3. Run:**
 
 ```bash
-python main.py
+uv run python main.py
 ```
 
 ---
 
 ## Docker Deployment
 
-The included [`Dockerfile`](Dockerfile) targets Python 3.12 and produces a minimal, portable image.
+The included [`Dockerfile`](Dockerfile) targets `Python 3.14-slim` and produces a minimal, portable image.
 
 **Build and run:**
 
@@ -275,7 +272,7 @@ volumes:
 
 ## Add Croissant to Your Server
 
-[Invite Croissant](https://discord.com/oauth2/authorize?client_id=1419550251739516959&permissions=1374389746800&integration_type=0&scope=bot)
+Croissant is an opensource and 100% safe Discord Bot. If you want to add Croissant in your server, [click here.](https://discord.com/oauth2/authorize?client_id=1419550251739516959&permissions=1374389746800&integration_type=0&scope=bot)
 
 ---
 

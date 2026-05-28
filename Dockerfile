@@ -1,11 +1,23 @@
-FROM python:3.13
+FROM python:3.14-slim
 
+# Python settings
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install uv from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Set working directory
 WORKDIR /app
 
-COPY "requirements.txt" .
+# Copy dependency files first
+COPY pyproject.toml uv.lock ./
 
-RUN pip install --no-cache-dir -r "requirements.txt"
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
+# Copy project files
 COPY . .
 
-CMD ["python", "main.py"]
+# Start the bot
+CMD ["uv", "run", "scripts/main.py"]
