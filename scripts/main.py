@@ -100,13 +100,14 @@ async def on_message(message):
         user_prompt = message.content.replace(bot.user.mention, "").strip()
 
         if not user_prompt:
+            await message.add_reaction("✅")
             return
 
         # system prompt for the bot
         messages = [
             {
                 "role": "system",
-                "content": config.system_prompt,
+                "content": config.SYSTEM_PROMPT,
             },
         ]
 
@@ -139,9 +140,9 @@ async def on_message(message):
         # getting the response from the bot
         chat_completion = groq_client.chat.completions.create(
             messages=messages,
-            model=config.model,
-            max_tokens=config.max_tokens,
-            temperature=config.temperature,
+            model=config.MODEL_NAME,
+            max_tokens=config.MAX_TOKENS,
+            temperature=config.TEMPERATURE,
         )
 
         response = chat_completion.choices[0].message.content.strip()

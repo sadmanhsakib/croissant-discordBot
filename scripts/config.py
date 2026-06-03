@@ -19,10 +19,10 @@ if not CLIENT_ID or not CLIENT_SECRET or not REDDIT_PASSWORD or not REDDIT_USERN
     REDDIT_ENABLED = False
 
 # master variables from database
-system_prompt=None
-model=None
-max_tokens=None
-temperature=None
+SYSTEM_PROMPT = None
+MODEL_NAME = None
+MAX_TOKENS = None
+TEMPERATURE = None
 
 # server specific variables from database
 prefix_cache = None
@@ -39,12 +39,12 @@ async def load_all_data():
     from database import db
 
     # master variables
-    global system_prompt, model, max_tokens, temperature
+    global SYSTEM_PROMPT, MODEL_NAME, MAX_TOKENS, TEMPERATURE
 
-    system_prompt = await db.get_variable("SYSTEM_PROMPT")
-    model = await db.get_variable("MODEL")
-    max_tokens = int(await db.get_variable("MAX_TOKENS"))
-    temperature = float(await db.get_variable("TEMPERATURE"))
+    SYSTEM_PROMPT = await db.get_variable("SYSTEM_PROMPT")
+    MODEL_NAME = await db.get_variable("MODEL")
+    MAX_TOKENS = int(await db.get_variable("MAX_TOKENS"))
+    TEMPERATURE = float(await db.get_variable("TEMPERATURE"))
 
     # server specific variables
     global prefix_cache, search_limit_cache, nsfw_allowed_cache, delete_after_cache
