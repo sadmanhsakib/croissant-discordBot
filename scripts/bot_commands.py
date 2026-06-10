@@ -406,9 +406,9 @@ class BotCommands(commands.Cog):
     async def reload_server_data(self, ctx):
         try:
             await config.load_all_data()
-            await ctx.send("✅All Data Reloaded")
+            await ctx.send("✅ All Data Reloaded")
         except:
-            await ctx.send("❌Failed to reload data.")
+            await ctx.send("❌ Failed to reload data.")
 
     async def send_item(self, item_names, message_channel):
         # looking for the correct link for each type

@@ -52,7 +52,7 @@ async def on_ready():
     cog.scheduler.start()
 
     # prints a message in console when ready
-    print(f"✅Logged in as: {bot.user}")
+    print(f"✅ Logged in as: {bot.user}")
 
 
 @bot.event

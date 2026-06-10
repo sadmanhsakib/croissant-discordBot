@@ -22,11 +22,11 @@ class Database:
                 await conn.execute("CREATE SCHEMA IF NOT EXISTS public")
                 await conn.execute("SET search_path TO public")
 
-            print("✅Connected to the database.")
+            print("✅ Connected to the database.")
 
             await self.create_tables()
         except Exception as error:
-            print(f"❌Failed to connect to the database: {error}")
+            print(f"❌ Failed to connect to the database: {error}")
 
     async def create_tables(self):
         try:

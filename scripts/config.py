@@ -96,7 +96,7 @@ async def set_default(server_id: int):
     await db.set_variable(server_id, "NSFW_STORAGE", "{}")
     await db.set_variable(server_id, "AUTO_DELETE", "{}")
 
-    print("✅Successfully set the default values for this server!")
+    print("✅ Successfully set the default values for this server!")
 
 async def remove_data(server_id: int):
     from database import db
@@ -117,4 +117,4 @@ async def remove_data(server_id: int):
     # removing the data from the database
     await db.delete_all_variables(server_id)
 
-    print("✅Successfully removed the data from the database!")
+    print("✅ Successfully removed the data from the database!")

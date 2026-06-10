@@ -23,7 +23,7 @@ async def authenticate():
 
         # verify authentication
         user = await reddit.user.me()
-        print("✅Logged in as: ", user.name)
+        print(" ✅ Logged in as: ", user.name)
         return True
     except Exception as e:
         print(f"❌ Reddit authentication failed: {e}")
